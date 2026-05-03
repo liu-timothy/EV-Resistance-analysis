@@ -20,12 +20,16 @@
 
 # packages
 pkg <- c("DESeq2", "msigdbr", "stringr", "dplyr", "fgsea", "ggplot2", "ggrepel", 
-         "gg.gap", "ggbreak", "openxlsx", "tibble", "tidyr", "pheatmap",
-         "ComplexHeatmap", "circlize", "RColorBrewer", "grid", "gridExtra", "Gviz", 
-         "GenomicFeatures", "reshape2", "rtracklayer", "M3C", "BiocManager",
-         "ggpubr", "glue", "gprofiler2", "AnnotationDbi", "org.Hs.eg.db", "ggvenn",
-         "clusterProfiler", "forcats", "patchwork", "ggpattern", "purrr", "ComplexUpset",
-         "ReactomePA", "Sushi")
+          "gg.gap", "ggbreak", "openxlsx", "tibble", "tidyr", "pheatmap",
+          "ComplexHeatmap", "circlize", "RColorBrewer", "grid", "gridExtra", "Gviz", 
+          "GenomicFeatures", "reshape2", "rtracklayer", "M3C", "BiocManager",
+          "ggpubr", "glue", "gprofiler2", "AnnotationDbi", "org.Hs.eg.db", "ggvenn",
+          "clusterProfiler", "forcats", "patchwork", "ggpattern", "purrr", "ComplexUpset",
+          "ReactomePA", "Sushi")
+
+# excluded packages:         
+
+pkg <- c("DESeq2", "ggplot2", "ComplexHeatmap")
 
 for (x in pkg) {
   library(x, character.only = TRUE)
