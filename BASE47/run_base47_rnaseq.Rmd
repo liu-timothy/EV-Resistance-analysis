@@ -1,0 +1,186 @@
+---
+title: "run_base47_rnaseq"
+output: html_document
+---
+
+bulk RNA-seq per-sample expression matrix
+↓
+normalized/log-transformed expression
+↓
+47 BASE47 genes only
+↓
+RNA-seq BASE47 classifier
+↓
+Basal vs Luminal call per sample
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+if (!requireNamespace("DESeq2", quietly = TRUE)) {
+  BiocManager::install("DESeq2")
+}
+
+if (!requireNamespace("biomaRt", quietly = TRUE)) {
+  BiocManager::install("biomaRt")
+}
+
+if (!requireNamespace("pamr", quietly = TRUE)) {
+  install.packages("pamr")
+}
+
+library(DESeq2)
+library(pamr)
+library(tidyverse)
+
+```
+Convert tpm to log2(tpm+1)
+```{r}
+
+# Load data
+tpm_raw <- read.delim("~/Documents/GitHub/EV-Resistance-analysis/data/counts_tpm_gene_id.tsv", row.names = 1)
+tpm_raw$gene_id <- sub("\\..*", "", rownames(tpm_raw))
+rownames(tpm_raw) <- NULL
+
+# Sample columns are all columns except gene_id
+sample_cols <- setdiff(colnames(tpm_raw), "gene_id")
+
+# Deduplicate: keep highest mean-expressed row per Ensembl ID
+tpm_raw$mean_expr <- rowMeans(tpm_raw[, sample_cols, drop = FALSE], na.rm = TRUE)
+
+tpm_dedup <- tpm_raw %>%
+  group_by(gene_id) %>%
+  slice_max(mean_expr, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Put gene IDs back as row names
+rownames(tpm_dedup) <- tpm_dedup$gene_id
+
+# Keep only expression/sample columns
+tpm_dedup <- tpm_dedup[, sample_cols, drop = FALSE]
+
+# Log2 transform
+tpm_log2 <- log2(tpm_dedup + 1)
+
+rm(tpm_dedup)
+
+```
+
+Ensembl gene IDs -->gene symbols
+```{r}
+library(biomaRt)
+library(dplyr)
+
+ensg_ids <- rownames(tpm_log2)
+mart <- useEnsembl(
+  biomart = "genes",
+  dataset = "hsapiens_gene_ensembl"
+)
+
+
+gene_map <- getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol", "external_gene_name"),
+  filters = "ensembl_gene_id",
+  values = ensg_ids,
+  mart = mart
+)
+
+tpm_named <- tpm_log2 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("ensembl_gene_id") %>%
+  left_join(gene_map, by = "ensembl_gene_id")
+
+tpm_named <- tpm_named %>% mutate(gene_name = coalesce(na_if(as.character(hgnc_symbol), ""), as.character(ensembl_gene_id)), mean_expr = rowMeans(across(all_of(colnames(tpm_log2))), na.rm = TRUE)) %>% group_by(gene_name) %>% slice_max(mean_expr, n = 1, with_ties = FALSE) %>% ungroup()
+
+tpm_mapped <- tpm_named %>%
+  dplyr::select(gene_name, dplyr::all_of(colnames(tpm_log2))) %>%
+  as.data.frame()
+
+rownames(tpm_mapped) <- tpm_mapped$gene_name
+
+tpm_mapped <- tpm_mapped[, colnames(tpm_log2), drop = FALSE]
+
+```
+Subset to BASE47 genes
+```{r}
+base47_genes <- c(
+  "AHNAK2","ANXA10","ATP1B3","BIRC5","BMP4","BTG4","C1orf116",
+  "CA9","CAV1","CDCA3","CDH3","CLIC3","CTSL","DSC3","DSG3",
+  "EGFR","ELF3","ERBB2","ERRFI1","FOXA1","GATA3","GPX2","HER2",
+  "IRF6","KRT14","KRT17","KRT5","KRT6A","KRT6B","LAMC2","MMP10",
+  "MMP14","PPARG","PTPN13","RAB25","RPS6KA4","S100A7","S100A8",
+  "S100A9","SOX10","STAT3","TACSTD2","TRIM29","TYMP","UPK1A",
+  "UPK1B","UPK2"
+)
+
+
+tpm_base47 <- tpm_named[tpm_named$external_gene_name %in% base47_genes, ]
+
+rownames(tpm_base47) <- tpm_base47$hgnc_symbol
+tpm_base47 <- subset(tpm_base47, select=-c(external_gene_name, hgnc_symbol))
+```
+
+Download BASE47 classifier
+```{r}
+download.file(
+  "https://raw.githubusercontent.com/kimlabunc/Kardos_Rose_NanoString/main/BASE47_RNASEQ_PREDICTOR_DO_NOT_EDIT.txt",
+  destfile = "BASE47_RNASEQ_PREDICTOR_DO_NOT_EDIT.txt"
+)
+
+raw <- readLines("BASE47_RNASEQ_PREDICTOR_DO_NOT_EDIT.txt")
+
+# Parse: row 1 = sample names, row 2 = class labels, rows 3+ = gene centroids
+sample_names <- strsplit(raw[1], "\t")[[1]]
+sample_names <- sample_names[-1]  # drop leading empty string
+
+class_labels <- as.integer(strsplit(sub("^\t", "", raw[2]), "\t")[[1]])
+
+gene_lines <- raw[3:length(raw)]
+gene_mat <- do.call(rbind, lapply(gene_lines, function(x) {
+  vals <- strsplit(x, "\t")[[1]]
+  as.numeric(vals[-1])
+}))
+gene_names <- sapply(strsplit(gene_lines, "\t"), `[`, 1)
+rownames(gene_mat) <- gene_names
+colnames(gene_mat) <- sample_names
+
+# Compute centroids (1 = Luminal, 2 = Basal)
+centroid_luminal <- rowMeans(gene_mat[, class_labels == 1])
+centroid_basal   <- rowMeans(gene_mat[, class_labels == 2])
+centroids <- cbind(Luminal = centroid_luminal, Basal = centroid_basal)
+
+cat("Predictor genes:", nrow(centroids), "\n")
+```
+
+Subset to shared genes
+```{r}
+shared_genes <- intersect(rownames(tpm_mapped), rownames(centroids))
+cat("Shared genes:", length(shared_genes), "of", nrow(centroids), "\n")
+cat("Missing:", setdiff(rownames(centroids), rownames(tpm_mapped)), "\n")
+
+query_mat    <- as.matrix(tpm_mapped[shared_genes, ])
+centroid_sub <- centroids[shared_genes, ]
+```
+```{r}
+calls <- apply(query_mat, 2, function(sample_expr) {
+  r_lum <- cor(sample_expr, centroid_sub[, "Luminal"], method = "pearson")
+  r_bas <- cor(sample_expr, centroid_sub[, "Basal"],   method = "pearson")
+  data.frame(
+    cor_luminal = round(r_lum, 4),
+    cor_basal   = round(r_bas, 4),
+    subtype     = ifelse(r_bas > r_lum, "Basal", "Luminal")
+  )
+})
+
+results <- do.call(rbind, calls)
+results$sample <- colnames(query_mat)
+results <- results[, c("sample", "subtype", "cor_luminal", "cor_basal")]
+
+print(results)
+
+
+```
+
+
