@@ -221,5 +221,7 @@ unc.tma.rna.calls <- as.data.frame(cbind(pred.prob,pred.class))
 colnames(unc.tma.rna.calls) <- c("Basal.Correlation","Luminal.Correlation","BASE47.Subtype")
 unc.tma.rna.calls$BASE47.Subtype[unc.tma.rna.calls$BASE47.Subtype == 1] <- "Basal"
 unc.tma.rna.calls$BASE47.Subtype[unc.tma.rna.calls$BASE47.Subtype == 2] <- "Luminal"
+
+write.csv(unc.tma.rna.calls, file="BASE47_classification_output.csv", row.names=TRUE)
 ```
 
