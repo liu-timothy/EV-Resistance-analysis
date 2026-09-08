@@ -1,98 +1,60 @@
 # EV Resistance Analysis
 
-Analysis workspace for comparing extracellular-vesicle (EV) resistant bladder cancer cell lines with their parental lines, identifying shared RNA-seq signals, comparing those signals with a CRISPR screen, and validating selected genes by qPCR.
+This project uses bulk RNA-seq and qPCR data to identify and validate genes associated with Enfortumab Vedotin (EV) sensitivity in bladder cancer cell lines. Candidate genes are selected using 3 approaches: pathway enrichment, overlap across cell lines, and overlap with a CRISPR screen.
 
-The repository contains analysis code, processed differential-expression results, and generated figures. It does **not** currently contain the raw sequencing inputs referenced by the R pipeline.
+## Project structure
 
-## Project map
-
-```text
+``` text
 EV-Resistance-analysis/
-├── R-env/                       R environment setup and bulk RNA-seq pipeline
-├── data/                        DESeq2/CRISPR tables and RNA-seq figures
-│   ├── rp_vs_rr/                RT112 parental vs resistant
-│   ├── up_vs_ur/                UMUC1 parental vs resistant
-│   └── vp_vs_vr/                647V parental vs resistant
-├── bulkRNAseq_gene-overlaps/    Notebooks for gene-list overlap and prioritization
-├── qPCR-validation/             qPCR inputs, matched RNA-seq tables, notebooks, figures
-├── output.png                   Legacy/generated top-level figure (provenance unspecified)
-└── README.md                    This guide
+├── identifying-hits/       RNA-seq data and notebooks for selecting candidate genes
+├── qPCR-validation/        qPCR validation data, notebooks, and output figures
+├── R-env/                  R script for the original RNA-seq analysis
+├── environment.yml         Conda environment for the Python notebooks
+└── README.md               Project overview and file guide
 ```
 
-More detailed inventories are available in [`data/README.md`](data/README.md), [`bulkRNAseq_gene-overlaps/README.md`](bulkRNAseq_gene-overlaps/README.md), [`qPCR-validation/README.md`](qPCR-validation/README.md), and [`R-env/README.md`](R-env/README.md).
+### `identifying-hits/`
 
-## Naming conventions
+Contains the three approaches used to identify candidate EV-sensitivity genes.
 
-Comparison names encode the cell line and phenotype:
+#### `bulkRNAseq_gene-overlaps/`
 
-| Code | Meaning |
-|---|---|
-| `v` | 647V |
-| `r` | RT112 |
-| `u` | UMUC1 |
-| `p` | parental |
-| `r` (second position) | resistant |
+| Notebook | Purpose |
+|------------------------------------|------------------------------------|
+| `hits_by_pathway_enrichment.ipynb` | Prioritizes differentially expressed genes found in relevant enriched pathways |
+| `hits_by_cross-cell-line_overlap.ipynb` | Finds genes shared across the RT112, UMUC1, and 647V resistant cell-line comparisons |
+| `hits_by_crispr_rnaseq_overlap.ipynb` | Compares RNA-seq hits with genes identified in the EV-vs-PBS CRISPR screen |
 
-Thus, `vp_vs_vr` means **647V parental vs 647V resistant**, `rp_vs_rr` means **RT112 parental vs RT112 resistant**, and `up_vs_ur` means **UMUC1 parental vs UMUC1 resistant**. In DESeq2 result names, `p_vs_r` indicates that fold changes describe the second condition relative to the first; confirm the contrast in the producing analysis before interpreting the sign.
+#### `data/`
 
-Known resistant derivatives represented in the qPCR files are HT8 (UMUC1), 2F2 early/late (RT112), and 1C2 (647V).
+Contains processed DESeq2 results and figures used by the hit-identification notebooks.
 
-## Analysis workflow
+| Path | Description |
+|------------------------------------|------------------------------------|
+| `rp_vs_rr/` | RT112 parental vs resistant (2F2) |
+| `up_vs_ur/` | UMUC1 parental vs resistant (HT8) |
+| `vp_vs_vr/` | 647V parental vs resistant (1C2) |
+| `combined-lines_summary.*` | Combined differential-expression results from all three cell lines |
+| `EV_vs_PBS_DESeq2_results (Screen DESEQ2).txt` | Differential-expression results from the CRISPR screen |
 
-1. The R script performs count QC, PCA, DESeq2, fold-change shrinkage, GSEA/ORA, and overlap analyses.
-2. Processed results and plots are stored under `data/<comparison>/`.
-3. Python notebooks compare genes across cell lines and against the EV-vs-PBS CRISPR screen.
-4. qPCR notebooks calculate/plot expression changes and compare them with bulk RNA-seq results.
+Each cell-line folder includes full and fold-change-shrunken DESeq2 tables, upregulated/downregulated gene lists, summary statistics, and MA, volcano, and GSEA plots.
 
-## Getting started
+### `qPCR-validation/`
 
-### Python notebooks
+Contains the experimental data and analyses used to validate selected candidate genes.
 
-The checked-in Conda environment contains Python 3.10, Jupyter, pandas, NumPy, matplotlib, seaborn, scikit-learn, scipy, `matplotlib-venn`, and `nbqol`.
+| Folder | Description |
+|------------------------------------|------------------------------------|
+| `qpcr_data/` | Raw qPCR instrument-export CSV files |
+| `bulkRNAseq_data/` | Reduced RNA-seq tables matched to the qPCR comparisons |
+| `scripts/` | Notebooks comparing qPCR Ct values and expression changes with RNA-seq results |
+| `outs/` | Generated qPCR-versus-RNA-seq plots, grouped by hit source and expression direction |
 
-```bash
-conda env create -f R-env/environment.yml
-conda activate python-env
-jupyter lab
-```
+The two main validation notebooks are:
 
-Open notebooks from `bulkRNAseq_gene-overlaps/` or `qPCR-validation/scripts/`. They use `nbqol.path_to_git_root` to locate this repository.
+- `compare_qpcr_rnaseq_log2fc.ipynb`: compares qPCR relative expression with RNA-seq log2 fold change.
+- `compare_qpcr_ct_rnaseq_basemean.ipynb`: compares qPCR Ct values with RNA-seq base mean as a QC check.
 
-### R analysis
+### `R-env/`
 
-Install the required CRAN/Bioconductor packages in an R environment:
-
-```bash
-Rscript R-env/install_packages.R
-```
-
-Then edit every location marked `(EDIT)` in `R-env/RNAseq Individual Analysis - QC, DESeq2, GSEA.r`. The current script expects external feature-count, TPM, metadata, annotation, and plotting-function files at a Windows/OneDrive path; those inputs are not included here.
-
-## File types
-
-| Extension | Role |
-|---|---|
-| `.R` / `.r` | Package installation and RNA-seq analysis code |
-| `.ipynb` | Exploratory Python analyses and plot generation |
-| `.csv` | Comma-separated qPCR inputs or combined/trimmed RNA-seq tables |
-| `.txt` | Tab-separated DESeq2/CRISPR results, gene lists, or run statistics |
-| `.xlsx` | Spreadsheet copies of DESeq2 result tables |
-| `.pdf` | RNA-seq MA, volcano, and GSEA plots |
-| `.png` | qPCR/RNA-seq comparison figures and exploratory outputs |
-| `.yml` | Reproducible Conda environment specification |
-
-## Reproducibility notes
-
-- `environment.yml` was exported with Linux build pins and an absolute `prefix`; recreating it on macOS or Windows may require removing build strings and the final `prefix` entry.
-- `Ct_basemean_QC_check.ipynb` and `qpcr-plots.ipynb` reference a CSV in `/Users/timothy/Downloads/`. Place that source file in `qPCR-validation/qpcr_data/` and update the notebook path before a clean rerun.
-- Notebooks contain saved outputs. Restart the kernel and run all cells when generating results for reporting.
-- Raw RNA-seq data are not versioned in this repository. Record their source, genome/annotation version, and checksums separately when publishing or transferring the project.
-
-## Contribution and organization guidelines
-
-- Put reusable analysis code in `R-env/` or the appropriate notebook folder; put generated results under the matching output folder.
-- Use lowercase, underscore-separated names for new files and avoid spaces where practical.
-- Keep raw inputs separate from derived outputs. For new analyses, prefer `data/raw/`, `data/processed/`, and `results/` rather than mixing them.
-- Add a short Markdown cell at the top of each new notebook stating its purpose, inputs, outputs, and filtering thresholds.
-- Do not commit local session files (`.RData`, `.Rhistory`), OS metadata, notebook checkpoints, or virtual environments.
-
+Contains `RNAseq Individual Analysis - QC, DESeq2, GSEA.r`, the original R workflow for count QC, PCA, differential-expression analysis, fold-change shrinkage, enrichment analysis, and result visualization. The script references external raw counts, metadata, annotations, and helper functions that are not included in this repository.
