@@ -1,0 +1,22 @@
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+
+# R session state
+.RData
+.Rhistory
+.Rproj.user/
+
+# Jupyter and Python caches/environments
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor files
+.vscode/
+.idea/
+*~
+*.swp
+
